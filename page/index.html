@@ -1,0 +1,141 @@
+<script src="jquery-3.3.1.min.js"></script>
+<script src="papaparse.min.js"></script>
+<script src="smoothie.min.js"></script>
+
+<link rel="stylesheet" href="pure-min.css">
+
+<script>
+  function generateTable(data) {
+    var html = '<table class="pure-table pure-table-bordered" style="width:100%">\n';
+    if (data[0].constructor === Array) {
+      for (var row in data) {
+        if (row == 0) {
+          html += '<thead>\r\n';
+          html += '<tr>\r\n';
+          for (var item in data[row]) {
+            html += '<td>' + data[row][item] + '</td>\r\n';
+          }
+          html += '</tr>\r\n';
+          html += '</thead>\r\n';
+          html += '<body>\r\n';
+        } else {
+          html += '<tr>\r\n';
+          for (var item in data[row]) {
+            html += '<td>' + data[row][item] + '</td>\r\n';
+          }
+          html += '</tr>\r\n';
+        }
+        html += '</tbody>\r\n';
+
+      }
+    }
+
+    return html + '\n</table>';
+  }
+
+
+  var temperature = new TimeSeries();
+  var used_memory = new TimeSeries();
+
+  function getProcesses() {
+    $.ajax({
+      type: 'GET',
+      url: '/gpu_processes',
+      success: function(data) {
+        var processes_array = Papa.parse(data)['data'];
+        processes_array.pop();
+        $('#processes_table').html(generateTable(processes_array));
+
+      }
+    });
+  }
+
+  function getUtilization() {
+    $.ajax({
+      type: 'GET',
+      url: '/gpu_utilization',
+      success: function(data) {
+        var parsed = Papa.parse(data);
+        var date = Date.parse(parsed['data'][1][4])
+        temperature.append(date, parsed['data'][1][0]);
+        $('#tempDiv').html(parsed['data'][1][0] + 'ºC');
+
+        used_memory.append(date, parsed['data'][1][2].match(/(\d+)\s/)[1]);
+        $('#memDiv').html(parsed['data'][1][2]);
+      }
+    });
+  }
+
+  setInterval(getProcesses, 10000);
+  setInterval(getUtilization, 2000);
+
+  getProcesses();
+  getUtilization();
+
+
+  $(document).ready(function() {
+    var smoothieTemp = new SmoothieChart({
+      millisPerPixel: 100,
+      maxValue:90,
+      minValue:25,
+      grid: {
+        sharpLines: true,
+        millisPerLine: 10000,
+        verticalSections: 5,
+        borderVisible: false
+      },
+      timestampFormatter: SmoothieChart.timeFormatter
+    });
+    var tempCanvas = document.getElementById('tempCanvas');
+    tempCanvas.width = window.innerWidth * 0.8;
+    smoothieTemp.streamTo(document.getElementById("tempCanvas"));
+    smoothieTemp.addTimeSeries(temperature, {
+      lineWidth: 2,
+      strokeStyle: '#ff0000',
+      fillStyle: 'rgba(151,39,43,0.71)'
+    });
+
+    var smoothieMem = new SmoothieChart({
+      millisPerPixel: 100,
+      maxValue:8192,
+      minValue:0,
+      grid: {
+        sharpLines: true,
+        millisPerLine: 10000,
+        verticalSections: 5,
+        borderVisible: false
+      },
+      timestampFormatter: SmoothieChart.timeFormatter
+    });
+    var memCanvas = document.getElementById('memCanvas');
+    memCanvas.width = window.innerWidth * 0.8;
+    smoothieMem.streamTo(document.getElementById("memCanvas"));
+    smoothieMem.addTimeSeries(used_memory, {
+      lineWidth: 2,
+      strokeStyle: '#5269f2',
+      fillStyle: 'rgba(42,72,144,0.71)'
+    });
+
+  });
+</script>
+
+<body style="margin:10px">
+  <div>
+    <canvas id="tempCanvas" height="200" style="left:0px; width:80%; margin-bottom:50px"></canvas>
+    <div style="float:right; margin:10px; font-family:sans-serif; width:15%; left:0px;">
+      <div style="font-size:25px;">Temperature</div>
+      <div id="tempDiv" style="font-size:70px;"></div>
+    </div>
+  </div>
+
+  <div>
+    <canvas id="memCanvas" height="200" style="left:0px; width:80%; margin-bottom:50px"></canvas>
+    <div style="float:right; margin:10px; font-family:sans-serif; width:15%; left:0px;">
+      <div style="font-size:25px;">Used Memory</div>
+      <div id="memDiv" style="font-size:70px;"></div>
+    </div>
+  </div>
+</body>
+
+<div id="processes_table">
+</div>
